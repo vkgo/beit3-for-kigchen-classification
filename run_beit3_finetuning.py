@@ -23,7 +23,7 @@ from optim_factory import create_optimizer, get_parameter_groups, \
     LayerDecayValueAssigner, get_is_head_flag_for_vit
 
 from engine_for_finetuning import train_one_epoch, get_handler, evaluate
-from datasets import create_downstream_dataset
+from datasets import create_downstream_dataset, create_downstream_hwj_test_dataset
 from utils import NativeScalerWithGradNormCount as NativeScaler
 import utils
 import modeling_finetune
@@ -196,7 +196,9 @@ def get_args():
     parser.add_argument('--zero_stage', default=0, type=int,
                         help='ZeRO optimizer stage (default: 0)')
     parser.add_argument('--checkpoint', type=str,
-                        help='checkpoint path')
+                        help='checkpoint path, load your checkpoint. Added by hwj.')
+    parser.add_argument('--hwj_test', action='store_true',
+                        help='evaluate the testset instead of valset. Added by hwj.')
 
     known_args, _ = parser.parse_known_args()
 
@@ -377,6 +379,27 @@ def main(args, ds_init):
                 print(json.dumps(captioning_result))
                 utils.write_result_to_jsonl(captioning_result, result_file)
             exit(0)
+
+    if args.hwj_test:
+        data_loader_test = create_downstream_hwj_test_dataset(args, is_eval=True)
+        if args.task in ["nlvr2", "flickr30k", "coco_retrieval", "imagenet"]:
+            ext_test_stats, task_key = evaluate(data_loader_test, model, device, task_handler)
+            print(f"Accuracy of the network on the {len(data_loader_test.dataset)} test images: {ext_test_stats[task_key]:.3f}%")
+            exit(0)
+        elif args.task == "vqav2":
+            result, _ = evaluate(data_loader_test, model, device, task_handler)
+            utils.dump_predictions(args, result, "vqav2_test")
+            exit(0)
+        elif args.task in ["coco_captioning", "nocaps"]:
+            predictions, _ = evaluate(data_loader_test, model, device, task_handler)
+            prediction_file = utils.dump_predictions(args, predictions, "{}_test".format(args.task))
+            if utils.is_main_process() and args.task == "coco_captioning":
+                captioning_result = utils.coco_caption_eval(args.output_dir, prediction_file, "{}_test".format(args.task))
+                result_file = os.path.join(args.output_dir, f"{args.task}_result.json")
+                print(json.dumps(captioning_result))
+                utils.write_result_to_jsonl(captioning_result, result_file)
+            exit(0)
+
 
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()

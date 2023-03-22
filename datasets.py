@@ -288,6 +288,8 @@ class ImageNetDataset(BaseDataset):
             return ("imagenet.val.index.jsonl", )
         elif split == "test":
             return ("imagenet.val.index.jsonl", )
+        elif split == "hwj_test":
+            return ("imagenet.test.index.jsonl",)
         else:
             raise RuntimeError("split %s is not found!" % split)
 
@@ -337,7 +339,7 @@ class ImageNetDataset(BaseDataset):
         _write_data_into_jsonl(items, index_file)
 
     @classmethod
-    def make_dataset_index(cls, train_data_path, val_data_path, index_path):
+    def make_dataset_index(cls, index_path, train_data_path, val_data_path, test_data_path=None):
         data_path_prefix = train_data_path[:[x[0]==x[1] for x in zip(train_data_path, val_data_path)].index(0)]
         classes, class_to_idx = cls._find_classes(train_data_path)
         cls._make_imagenet_index(
@@ -348,6 +350,13 @@ class ImageNetDataset(BaseDataset):
              data_path=val_data_path, index_path=index_path, data_path_prefix=data_path_prefix,
              class_to_idx=class_to_idx, split="val",
         )
+        # Added by hwj.
+        # to create imagenet.test.index.jsonl
+        if test_data_path != None:
+            cls._make_imagenet_index(
+                data_path=test_data_path, index_path=index_path, data_path_prefix=data_path_prefix,
+                class_to_idx=class_to_idx, split="test",
+            )
 
 
 class VQAv2Dataset(BaseDataset):
@@ -845,3 +854,7 @@ def create_downstream_dataset(args, is_eval=False):
         return \
             create_dataset_by_split(args, split="train", is_train=True), \
             create_dataset_by_split(args, split="val", is_train=True)
+
+
+def create_downstream_hwj_test_dataset(args, is_eval=False):
+    return create_dataset_by_split(args, split="hwj_test", is_train=False)
